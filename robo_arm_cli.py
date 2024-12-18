@@ -1,3 +1,6 @@
+import sys
+import termios
+import tty
 import click
 import yaml
 from gpiozero import Servo, Device
@@ -21,15 +24,15 @@ SERVOS = {
 STATE_FILE = "servo_states.yaml"
 RECENT_STATE_FILE = "recent_servo_states.yaml"
 
-# Initialize positions (0-100 scale) for each servo
-positions = {name: 50 for name in SERVOS}  # Default to mid-position
+# Initialize SERVO_POSITIONS (0-100 scale or 'off') for each servo
+DEFAULT_SERVO_POSITIONS = {name: "off" for name in SERVOS}  # Default to off
 
-# Helper function to save positions to a YAML file
+# Helper function to save SERVO_POSITIONS to a YAML file
 def save_state_to_yaml(state, file_path):
     with open(file_path, "w") as f:
         yaml.dump(state, f)
 
-# Helper function to load positions from a YAML file
+# Helper function to load SERVO_POSITIONS from a YAML file
 def load_state_from_yaml(file_path, default_state):
     if os.path.exists(file_path):
         with open(file_path, "r") as f:
@@ -38,12 +41,26 @@ def load_state_from_yaml(file_path, default_state):
         return default_state
 
 # Load recent positions or initialize with defaults
-positions = load_state_from_yaml(RECENT_STATE_FILE, positions)
+SERVO_POSITIONS = load_state_from_yaml(RECENT_STATE_FILE, DEFAULT_SERVO_POSITIONS)
 
-# Set all servos to the loaded positions
+# Set all servos to the loaded SERVO_POSITIONS or turn them off
 for name, servo in SERVOS.items():
-    normalized_value = (positions[name] - 50) / 50  # Convert 0-100 scale to -1 to 1
-    servo.value = normalized_value
+    if SERVO_POSITIONS[name] == "off":
+        servo.value = None  # Turn off servo
+    else:
+        normalized_value = (SERVO_POSITIONS[name] - 50) / 50  # Convert 0-100 scale to -1 to 1
+        servo.value = normalized_value
+
+# Function to read a single character from stdin
+def get_single_char():
+    fd = sys.stdin.fileno()
+    old_settings = termios.tcgetattr(fd)
+    try:
+        tty.setraw(fd)
+        ch = sys.stdin.read(1)
+    finally:
+        termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
+    return ch
 
 # Interactive CLI
 @click.command()
@@ -60,7 +77,9 @@ def cli():
         print(f"{len(SERVOS) + 2}. Exit")
         print()
 
-        choice = input("Select an option: ")
+        print("Select an option: ", end="", flush=True)
+        choice = get_single_char()
+        print(choice)  # Echo the choice
 
         if choice.isdigit():
             choice = int(choice)
@@ -71,38 +90,46 @@ def cli():
                 save_all()
             elif choice == len(SERVOS) + 2:
                 print("Exiting CLI tool.")
-                save_state_to_yaml(positions, RECENT_STATE_FILE)
+                save_state_to_yaml(SERVO_POSITIONS, RECENT_STATE_FILE)
                 break
             else:
                 print("Invalid selection. Please try again.")
+        elif choice.lower() == 'q':
+            print("Exiting CLI tool.")
+            save_state_to_yaml(SERVO_POSITIONS, RECENT_STATE_FILE)
+            break
         else:
-            print("Invalid input. Please enter a number.")
+            print("Invalid input. Please enter a valid option.")
 
 # Function to control a specific servo
 def control_servo(servo_name):
     servo = SERVOS[servo_name]
-    print(f"\nControlling {servo_name}. Enter values between 0-100, 'save' to save state, or 'exit' to return to the main menu.")
+    print(f"\nControlling {servo_name}. Enter values between 0-100, 'off' to turn off, 'save' to save state, or 'q' to return to the main menu.")
     while True:
         cmd = input(f"{servo_name} > ")
-        if cmd.lower() == "exit":
+        if cmd.lower() in ["exit", "q"]:
             print(f"Exiting control mode for {servo_name}.")
             break
         elif cmd.lower() == "save":
-            print(f"Saving {servo_name} position ({positions[servo_name]}) to YAML.")
-            save_state_to_yaml({servo_name: positions[servo_name]}, STATE_FILE)
+            print(f"Saving {servo_name} position ({SERVO_POSITIONS[servo_name]}) to YAML.")
+            save_state_to_yaml({servo_name: SERVO_POSITIONS[servo_name]}, STATE_FILE)
+        elif cmd.lower() == "off":
+            print(f"Turning off {servo_name}.")
+            SERVO_POSITIONS[servo_name] = "off"
+            servo.value = None  # Turn off servo
         elif cmd.isdigit() and 0 <= int(cmd) <= 100:
             value = int(cmd)
-            positions[servo_name] = value
+            SERVO_POSITIONS[servo_name] = value
             normalized_value = (value - 50) / 50  # Convert 0-100 scale to -1 to 1
             servo.value = normalized_value
         else:
-            print("Invalid command. Type a number between 0-100, 'save', or 'exit'.")
+            print("Invalid command. Type a number between 0-100, 'off', 'save', or 'q'.")
 
-# Function to save all positions
+# Function to save all SERVO_POSITIONS
 def save_all():
-    print("Saving all servo positions to YAML.")
-    save_state_to_yaml(positions, STATE_FILE)
-    print("All positions saved.")
+    print("Saving all servo SERVO_POSITIONS to YAML.")
+    save_state_to_yaml(SERVO_POSITIONS, STATE_FILE)
+    print("All SERVO_POSITIONS saved.")
 
 if __name__ == "__main__":
     cli()
