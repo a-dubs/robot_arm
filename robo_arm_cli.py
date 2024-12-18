@@ -50,39 +50,33 @@ for name, servo in SERVOS.items():
 def cli():
     "Interactive CLI tool to control servos"
     while True:
-        print("\nMain Menu:")
-        print("1. Select a servo to control")
-        print("2. Save all servo positions")
-        print("3. Exit")
-        choice = input("Enter your choice: ")
+        print("\n" + "-" * 80)
+        print("Select servo:")
+        for idx, name in enumerate(SERVOS.keys(), start=1):
+            print(f"{idx}. {name}")
+        print("-" * 40)
+        print("Other options:")
+        print(f"{len(SERVOS) + 1}. Save all servo positions")
+        print(f"{len(SERVOS) + 2}. Exit")
+        print()
 
-        if choice == "1":
-            print("\nAvailable Servos:")
-            for idx, name in enumerate(SERVOS.keys(), start=1):
-                print(f"{idx}. {name}")
-            servo_choice = input("Select a servo by name or number: ")
+        choice = input("Select an option: ")
 
-            servo_name = None
-            if servo_choice.isdigit():
-                index = int(servo_choice) - 1
-                if 0 <= index < len(SERVOS):
-                    servo_name = list(SERVOS.keys())[index]
-            elif servo_choice in SERVOS:
-                servo_name = servo_choice
-
-            if servo_name:
+        if choice.isdigit():
+            choice = int(choice)
+            if 1 <= choice <= len(SERVOS):
+                servo_name = list(SERVOS.keys())[choice - 1]
                 control_servo(servo_name)
+            elif choice == len(SERVOS) + 1:
+                save_all()
+            elif choice == len(SERVOS) + 2:
+                print("Exiting CLI tool.")
+                save_state_to_yaml(positions, RECENT_STATE_FILE)
+                break
             else:
-                print("Invalid selection.")
-
-        elif choice == "2":
-            save_all()
-        elif choice == "3":
-            print("Exiting CLI tool.")
-            save_state_to_yaml(positions, RECENT_STATE_FILE)
-            break
+                print("Invalid selection. Please try again.")
         else:
-            print("Invalid choice. Please try again.")
+            print("Invalid input. Please enter a number.")
 
 # Function to control a specific servo
 def control_servo(servo_name):
